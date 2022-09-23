@@ -1,0 +1,17 @@
+[Unit]
+Description=WeWrite - Collaborative markdown editor
+
+[Install]
+WantedBy=multi-user.target
+
+[Service]
+# specific user
+User=root
+# directory
+WorkingDirectory=
+# start
+ExecStart=/usr/bin/php server.php --port=8080 --cookie=we-write
+# The limits of max open file
+LimitNOFILE=262144
+# The limits of max core dump size
+LimitCORE=infinity

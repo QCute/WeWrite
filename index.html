@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WeWrite - Collaborative markdown editor</title>
+    <meta charset='utf-8' />
+    <link rel='shortcut icon' href='editor.md/images/logos/editormd-logo-64x64.png' type='image/x-icon' />
+    <script src='editor.md/examples/js/jquery.min.js'></script>
+    <link rel='stylesheet' href='editor.md/css/editormd.min.css' />
+    <script src='editor.md/editormd.min.js'></script>
+    <style>body { margin: 0; height: calc(100vh); } </style>
+    <style>.CodeMirror-vscrollbar { right: 6px!important; }</style>
+    <style>.CodeMirror-v-split-bar { min-width: 6px; position: absolute; right: 0; top: 0; bottom: 0px; cursor: w-resize; background-color: #AAA; }</style>
+</head>
+<body>
+    <div id='editor' style='border: unset;'>
+        <textarea style='display: none;'></textarea>
+    </div>
+    <script type='text/javascript'>
+        const query = Object.fromEntries(new Map(location.search.substr(1).split('&').map(kv => kv.split('='))));
+        document.cookie='id=' + query.id;
+        let editor = editormd('editor', {
+            'path': 'editor.md/lib/',
+            'socket': undefined,
+            'pre': '',
+            onload: function() {
+                // insert split 
+                const scrollBar = document.querySelector('.CodeMirror-vscrollbar');
+                let splitBar = scrollBar.cloneNode();
+                splitBar.classList.toggle('CodeMirror-vscrollbar');
+                splitBar.classList.toggle('CodeMirror-v-split-bar');
+                // split bar mouse down/move/up event
+                splitBar.onmousedown = (downEvent) => {
+                    let codeMirror = document.querySelector('.CodeMirror');
+                    const codeMirrorWidth = parseInt(codeMirror.style.width);
+                    let preview = document.querySelector('.editormd-preview');
+                    const previewWidth = parseInt(preview.style.width);
+                    // cursor
+                    const cursor = document.body.style.cursor;
+                    document.body.style.cursor = 'w-resize';
+                    // resize
+                    document.onmousemove = (moveEvent) => {
+                        const x = moveEvent.clientX - downEvent.clientX;
+                        codeMirror.style.width = (codeMirrorWidth + x) + 'px';
+                        preview.style.width = (previewWidth - x) + 'px';
+                    };
+                    // clean
+                    document.onmouseup = (upEvent) => {
+                        document.onmousemove = undefined;
+                        document.onmouseup = undefined;
+                        document.body.style.cursor = cursor;
+                    }
+                };
+                scrollBar.parentElement.appendChild(splitBar);
+
+                // data
+                this.settings.socket = new WebSocket(location.protocol.replace(/http/, 'ws') + '//' + location.host);
+                this.settings.socket.onopen = () => {
+                    this.settings.socket.send(JSON.stringify({id: query.id, type: 'get'}));
+                }
+                this.settings.socket.onmessage = ({data}) => {
+                    let {type, text} = JSON.parse(data);
+                    // the new, get from local storage
+                    if(type == 0) {
+                        text = localStorage.getItem(query.id, text) || '';
+                        // push local storage text
+                        if(text.length > 0) {
+                            const data = {id: query.id, type: 'push', text};
+                            this.settings.socket.send(JSON.stringify(data));
+                        }
+                    }
+                    const cursor = this.getCursor();
+                    this.settings.pre = text;
+                    this.setValue(text);
+                    this.setCursor(cursor);
+                }
+                this.settings.socket.onclose = () => {
+                    alert('Socket disconnected, please reconnected!');
+                    location.reload();
+                }
+                this.settings.socket.onerror = (error) => {
+                    alert('Socket error, please reconnected!');
+                    location.reload();
+                    console.error(error);
+                }
+            },
+            onchange: function() {
+                const text = this.getValue();
+                if (this.settings.pre == text) return;
+                this.settings.pre = text;
+                localStorage.setItem(query.id, text);
+                const data = {id: query.id, type: 'push', text};
+                this.settings.socket.send(JSON.stringify(data));
+            }
+        });
+    </script>
+</body>
+</html>
